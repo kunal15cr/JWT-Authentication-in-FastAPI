@@ -1,28 +1,43 @@
 from datetime import datetime, timedelta, timezone
-from authlib.jose import jwt, JWTError
-from fastapi import HTTPException
+from authlib.jose import jwt, JoseError
+from fastapi import HTTPException, status
 
-# constants
 SECRET_KEY = "my_secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Function to create a JWT token
 
-def create_access_token(data: dict):
-    header = {"alg" : ALGORITHM}
-    expire = datetime.now(timezone.utc) + timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
+def create_access_token(data: dict) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
     payload = data.copy()
     payload.update({"exp": expire})
-    return jwt.encode(header, payload, SECRET_KEY).decode('utf-8')
 
-def verify_access_token(token: str):
+    header = {"alg": ALGORITHM}
+    token = jwt.encode(header, payload, SECRET_KEY)
+
+    return token
+
+
+def verify_access_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY)
-        payload.validate_exp()
-        user_name = payload.get("sub")
-        if user_name is None:
-            raise HTTPException(status_code=401, detail="Could not validate credentials")
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            claims_options={"exp": {"essential": True}},
+        )
+        payload.validate()
+
+        if payload.get("sub") is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+            )
+
         return payload
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+    except JoseError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
